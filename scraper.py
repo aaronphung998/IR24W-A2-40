@@ -15,7 +15,18 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+
+    # ---- IMPLEMENTATION ----
+    # look through each word of the content and match it against a regular expression to check if its a url
+    # if it is a url, add it to the list
+    all_links = []
+    if resp.status == 200:
+        for word in resp.text.split():
+            if re.match("^https?:\/\/[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\/[-a-zA-Z0-9()@:%_\+.~#?&//=]*$", word):
+                all_links.append(word)
+    else:
+        print("Error")
+    return all_links
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
