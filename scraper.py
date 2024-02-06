@@ -21,11 +21,14 @@ def extract_next_links(url, resp):
     # if it is a url, add it to the list
     all_links = []
     if resp.status == 200:
-        for word in resp.text.split():
-            if re.match("^https?:\/\/[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\/[-a-zA-Z0-9()@:%_\+.~#?&//=]*$", word):
-                all_links.append(word)
+        for line in resp.raw_response.iter_lines(decode_unicode=True):
+            for word in line.split():
+                match = re.match("^(https?:\/\/[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$", word)
+                if match:
+                    all_links.append(match.group(0))
     else:
         print("Error")
+    print(all_links)
     return all_links
 
 def is_valid(url):
