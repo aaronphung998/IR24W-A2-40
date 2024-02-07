@@ -1,7 +1,13 @@
 import re
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 
 # ---- things to keep in mind ----
+# only crawl these domains
+#   *.ics.uci.edu/*
+#   *.cs.uci.edu/*
+#   *.informatics.uci.edu/*
+#   *.stat.uci.edu/*
 # traps
 #   -infinitely deep directories
 #       -calculate deepness of link within directories and set limit
@@ -18,6 +24,12 @@ from urllib.parse import urlparse
 #   -longest page in # of words
 #   -50 most common words
 #   -number of subdomains in ics.uci.edu
+# redirected links
+#   -https://mcs.ics.uci.edu/?p=587 leads to https://mcs.ics.uci.edu/about/curriculum/
+#   -for the purposes of the assignment these should be considered unique pages
+#   -only discard fragment part in url
+
+url_pattern = '^(https?:\/\/(([a-zA-Z0-9]{2,}\.)*ics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*cs\.uci\.edu|([a-zA-Z0-9]{2,}\.)*informatics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*stat\.uci\.edu)\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$'
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -38,17 +50,21 @@ def extract_next_links(url, resp):
     # look through each word of the content and match it against a regular expression to check if its a url
     # if it is a url, add it to the list
 
-    # use BeautifulSoup to parse XML information from website, using .get_text() to extract text and .find_all(True) and element['href'] to get hyperlinks
+    # use BeautifulSoup to parse HTML information from website, using .get_text() to extract text and .find_all(True) and element['href'] to get hyperlinks
+    # pip install beautifulsoup4
     all_links = []
     if resp.status == 200:
-        for line in resp.raw_response.iter_lines(decode_unicode=True):
-            for word in line.split():
-                match = re.match("^(https?:\/\/[a-zA-Z0-9]+\.[a-zA-Z0-9]{2,}\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$", word)
-                if match:
-                    all_links.append(match.group(0))
+        soup = BeautifulSoup(resp.raw_response.text, features='lxml')
+        for a in soup.find_all(href=re.compile(url_pattern)):
+            href = a.get('href', '/')
+
+            # remove fragment from URL
+            url_match = re.match(url_pattern, href)
+            all_links.append(url_match.group(0))
     else:
         print("Error")
-    print(all_links)
+        print(f'Status code: {resp.status}')
+        print(resp.error)
     return all_links
 
 def is_valid(url):
