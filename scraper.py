@@ -1,6 +1,24 @@
 import re
 from urllib.parse import urlparse
 
+# ---- things to keep in mind ----
+# traps
+#   -infinitely deep directories
+#       -calculate deepness of link within directories and set limit
+#   -dynamic pages producing an unbounded number of documents
+#       -keep track of number of items downloaded within a website directory and set limit
+#   -pages with a lot of character to crash memory
+# needed info from pages
+#   -all hyperlinks
+#   -number of words
+#   -most common words and their frequencies, ignoring stop words
+#       -50 most common words in entire set of pages
+# things needed for report
+#   -# of unique pages
+#   -longest page in # of words
+#   -50 most common words
+#   -number of subdomains in ics.uci.edu
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
@@ -19,11 +37,13 @@ def extract_next_links(url, resp):
     # ---- IMPLEMENTATION ----
     # look through each word of the content and match it against a regular expression to check if its a url
     # if it is a url, add it to the list
+
+    # use BeautifulSoup to parse XML information from website, using .get_text() to extract text and .find_all(True) and element['href'] to get hyperlinks
     all_links = []
     if resp.status == 200:
         for line in resp.raw_response.iter_lines(decode_unicode=True):
             for word in line.split():
-                match = re.match("^(https?:\/\/[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$", word)
+                match = re.match("^(https?:\/\/[a-zA-Z0-9]+\.[a-zA-Z0-9]{2,}\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$", word)
                 if match:
                     all_links.append(match.group(0))
     else:
