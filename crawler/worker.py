@@ -8,10 +8,11 @@ import time
 
 
 class Worker(Thread):
-    def __init__(self, worker_id, config, frontier):
+    def __init__(self, worker_id, config, frontier, scrap):
         self.logger = get_logger(f"Worker-{worker_id}", "Worker")
         self.config = config
         self.frontier = frontier
+        self.scraper = scrap
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
         assert {getsource(scraper).find(req) for req in {"from urllib.request import", "import urllib.request"}} == {-1}, "Do not use urllib.request in scraper.py"
@@ -21,14 +22,20 @@ class Worker(Thread):
         while True:
             tbd_url = self.frontier.get_tbd_url()
             if not tbd_url:
-                self.logger.info("Frontier is empty. Stopping Crawler.")
-                break
-            resp = download(tbd_url, self.config, self.logger)
-            self.logger.info(
-                f"Downloaded {tbd_url}, status <{resp.status}>, "
-                f"using cache {self.config.cache_server}.")
-            scraped_urls = scraper.scraper(tbd_url, resp)
-            for scraped_url in scraped_urls:
-                self.frontier.add_url(scraped_url)
-            self.frontier.mark_url_complete(tbd_url)
-            time.sleep(self.config.time_delay)
+                if self.frontier.get_tbd_count() <= 0:
+                    self.logger.info("Frontier is empty. Stopping Crawler.")
+                    break
+                else:
+                    self.logger.info("Frontier did not return URL, but still has URLs.")
+                    print(f'# of urls: {self.frontier.get_tbd_count()}')
+                    time.sleep(self.config.time_delay)
+            else:
+                resp = download(tbd_url, self.config, self.logger)
+                self.logger.info(
+                    f"Downloaded {tbd_url}, status <{resp.status}>, "
+                    f"using cache {self.config.cache_server}.")
+                scraped_urls = self.scraper.scraper(tbd_url, resp)
+                for scraped_url in scraped_urls:
+                    self.frontier.add_url(scraped_url)
+                self.frontier.mark_url_complete(tbd_url)
+                #time.sleep(self.config.time_delay)
