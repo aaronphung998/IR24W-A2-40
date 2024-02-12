@@ -38,7 +38,8 @@ from threading import RLock
 #   -<a href='/filewithinpage'/>
 #   -^should be able to detect these and tranform them into the proper absolute URL
 
-url_pattern = '^(https?:\/\/(([a-zA-Z0-9]{2,}\.)*ics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*cs\.uci\.edu|([a-zA-Z0-9]{2,}\.)*informatics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*stat\.uci\.edu)\/[a-zA-Z0-9()@:%_\+.~?&//=]*)(#[a-zA-Z0-9()@:%_\+.~?&//=]*)?$'
+url_pattern = '^(https?:\/\/(([a-zA-Z0-9]{2,}\.)*ics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*cs\.uci\.edu|([a-zA-Z0-9]{2,}\.)*informatics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*stat\.uci\.edu)\/[a-zA-Z0-9()@:%_+.~?&/\\=]*)(#[a-zA-Z0-9()@:%_+.~?&/\\=]*)?$'
+relative_url_pattern = '(\/[a-zA-Z0-9()@:%_+.~?&/\\=]+)(#[a-zA-Z0-9()@:%_+.~?&/\\=]*)?$'
 # page_lengths = dict()
 # ics_subdomain_pages = dict()
 # word_frequencies = defaultdict(int)
@@ -111,6 +112,18 @@ class Scraper:
                 # remove fragment from URL
                 url_match = re.match(url_pattern, href)
                 all_links.append(url_match.group(1))
+
+            for tag in soup.find_all(href=re.compile(relative_url_pattern)):
+                href = a.get('href','/')
+                #remove the fragment from URL
+                url_match = re.match(relative_url_pattern, href)
+                relative_link = url_match.group(1)
+                #convert the relative URL to an absolute URL by
+                #append the relative link to the parent URL
+                print(url + relative_link)
+                all_links.append(url + relative_link)
+
+
             page_words = re.split('\W+', soup.get_text(separator=' ', strip=True).lower())
             count = 0
             word_frequencies = defaultdict(int)
