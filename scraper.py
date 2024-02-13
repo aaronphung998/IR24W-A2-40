@@ -39,7 +39,7 @@ from threading import RLock
 #   -^should be able to detect these and tranform them into the proper absolute URL
 
 url_pattern = '^(https?:\/\/(([a-zA-Z0-9]{2,}\.)*ics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*cs\.uci\.edu|([a-zA-Z0-9]{2,}\.)*informatics\.uci\.edu|([a-zA-Z0-9]{2,}\.)*stat\.uci\.edu)\/[a-zA-Z0-9()@:%_+.~?&/\\=]*)(#[a-zA-Z0-9()@:%_+.~?&/\\=]*)?$'
-relative_url_pattern = '(\/[a-zA-Z0-9()@:%_+.~?&/\\=]+)(#[a-zA-Z0-9()@:%_+.~?&/\\=]*)?$'
+relative_url_pattern = '^(\/[a-zA-Z0-9()@:%_+.~?&/\\=]+)(#[a-zA-Z0-9()@:%_+.~?&/\\=]*)?$'
 # page_lengths = dict()
 # ics_subdomain_pages = dict()
 # word_frequencies = defaultdict(int)
@@ -108,20 +108,32 @@ class Scraper:
             soup = BeautifulSoup(resp.raw_response.text, features='lxml')
             for a in soup.find_all(href=re.compile(url_pattern)):
                 href = a.get('href', '/')
+                
 
                 # remove fragment from URL
                 url_match = re.match(url_pattern, href)
                 all_links.append(url_match.group(1))
 
             for tag in soup.find_all(href=re.compile(relative_url_pattern)):
-                href = a.get('href','/')
-                #remove the fragment from URL
-                url_match = re.match(relative_url_pattern, href)
-                relative_link = url_match.group(1)
-                #convert the relative URL to an absolute URL by
-                #append the relative link to the parent URL
-                print(url + relative_link)
-                all_links.append(url + relative_link)
+                
+                href = tag.get('href')
+                if not re.match(url_pattern, href):
+                    if len(href) >= 2 and href[:2] == '//':
+                        #print(f'prev link: {href}')
+                        href = f'https:{href}'
+                        #print(f'new link: {href}')
+                        url_match = re.match(url_pattern, href)
+                        if url_match:
+                            all_links.append(url_match.group(1))
+                    else:
+                        #print(f'href: {href}')
+                        #remove the fragment from URL
+                        url_match = re.match(relative_url_pattern, href)
+                        relative_link = url_match.group(1)
+                        #convert the relative URL to an absolute URL by
+                        #append the relative link to the parent URL
+                        #print(f'    link: {url}{relative_link}')
+                        all_links.append(url + relative_link)
 
 
             page_words = re.split('\W+', soup.get_text(separator=' ', strip=True).lower())
