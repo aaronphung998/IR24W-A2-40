@@ -58,6 +58,8 @@ class Scraper:
     def __init__(self, restart, frontier, stopwords_file='stopwords.txt', pagelengths_file='pagelengths.shelve', wordfrequencies_file='wordfrequencies.shelve'):
         self.logger = get_logger("SCRAPER")
         self.frontier = frontier
+        self.pagelengths_file = pagelengths_file
+        self.wordfrequencies_file = wordfrequencies_file
         if os.path.exists(pagelengths_file) and restart:
             os.remove(pagelengths_file)
         if os.path.exists(wordfrequencies_file) and restart:
@@ -65,9 +67,9 @@ class Scraper:
         self.lock = RLock()
 
         # Page lengths are stored in the format: {URL: length}
-        self.pagelengths_save = shelve.open(pagelengths_file)
+        # self.pagelengths_save = shelve.open(pagelengths_file)
         # Word frequencies are stored in the format: {word : frequency}
-        self.wordfrequencies_save = shelve.open(wordfrequencies_file)
+        # self.wordfrequencies_save = shelve.open(wordfrequencies_file)
 
         self.stopwords = set()
         with open(stopwords_file, mode='r') as file:
@@ -96,8 +98,6 @@ class Scraper:
         # use BeautifulSoup to parse HTML information from website, using .get_text() to extract text and .find_all(True) and element['href'] to get hyperlinks
         # pip install beautifulsoup4
         all_links = []
-        if self.frontier.is_crawled(resp.raw_response.url):
-            return []
         parse = urlparse(url)
         #print(parse.netloc)
         urlhash = get_urlhash(url)
@@ -108,6 +108,8 @@ class Scraper:
         #     else:
         #         ics_subdomain_pages[parse.netloc] += 1
         if resp.status == 200:
+            if self.frontier.is_crawled(resp.raw_response.url):
+                return []
             soup = BeautifulSoup(resp.raw_response.text, features='lxml')
             for a in soup.find_all(href=re.compile(url_pattern)):
                 href = a.get('href', '/')
@@ -163,14 +165,16 @@ class Scraper:
 
         self.lock.acquire()
         try:
-            for word, freq in word_frequencies.items():
-                if word not in self.wordfrequencies_save:
-                    self.wordfrequencies_save[word] = freq
-                else:
-                    self.wordfrequencies_save[word] += freq
-            self.pagelengths_save[url] = page_length
-            self.wordfrequencies_save.sync()
-            self.pagelengths_save.sync()
+            with shelve.open(self.wordfrequencies_file) as wordfrequencies_save:
+                for word, freq in word_frequencies.items():
+                    if word not in wordfrequencies_save:
+                        wordfrequencies_save[word] = freq
+                    else:
+                        wordfrequencies_save[word] += freq
+                    wordfrequencies_save.sync()
+            with shelve.open(self.pagelengths_file) as pagelengths_save:
+                pagelengths_save[url] = page_length
+                pagelengths_save.sync()
             
         finally:
             self.lock.release()
@@ -199,11 +203,11 @@ def is_valid(url):
         raise
 
 if __name__ == '__main__':
-    pagelengths = shelve.open('pagelengths.shelve')
-    wordfrequencies = shelve.open('wordfrequencies.shelve')
     with open('pagelengths.txt', mode='w') as file:
-        for k, v in sorted(pagelengths.items(), key=lambda x: x[1], reverse=True):
-            file.write(f'{k:100} : {v}\n')
+        with shelve.open('pagelengths.shelve') as pagelengths:
+            for k, v in sorted(pagelengths.items(), key=lambda x: x[1], reverse=True):
+                file.write(f'{k:100} : {v}\n')
     with open('wordfrequencies.txt', mode='w') as file:
-        for k, v in sorted(wordfrequencies.items(), key=lambda x: x[1], reverse=True):
-            file.write(f'{k:30} : {v}\n')
+        with shelve.open('wordfrequencies.shelve') as wordfrequencies:
+            for k, v in sorted(wordfrequencies.items(), key=lambda x: x[1], reverse=True):
+                file.write(f'{k:30} : {v}\n')
