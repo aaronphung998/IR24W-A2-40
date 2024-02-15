@@ -10,7 +10,7 @@ class Crawler(object):
         self.frontier = frontier_factory(config, restart)
         self.workers = list()
         self.worker_factory = worker_factory
-        self.scraper = scraper_factory(restart)
+        self.scraper = scraper_factory(restart, self.frontier)
 
     def start_async(self):
         self.workers = [

@@ -55,8 +55,9 @@ relative_url_pattern = '^(\/[a-zA-Z0-9()@:%_+.~?&/\\=]+)(#[a-zA-Z0-9()@:%_+.~?&/
 
 
 class Scraper:
-    def __init__(self, restart, stopwords_file='stopwords.txt', pagelengths_file='pagelengths.shelve', wordfrequencies_file='wordfrequencies.shelve'):
+    def __init__(self, restart, frontier, stopwords_file='stopwords.txt', pagelengths_file='pagelengths.shelve', wordfrequencies_file='wordfrequencies.shelve'):
         self.logger = get_logger("SCRAPER")
+        self.frontier = frontier
         if os.path.exists(pagelengths_file) and restart:
             os.remove(pagelengths_file)
         if os.path.exists(wordfrequencies_file) and restart:
@@ -95,6 +96,8 @@ class Scraper:
         # use BeautifulSoup to parse HTML information from website, using .get_text() to extract text and .find_all(True) and element['href'] to get hyperlinks
         # pip install beautifulsoup4
         all_links = []
+        if self.frontier.is_crawled(resp.raw_response.url):
+            return []
         parse = urlparse(url)
         #print(parse.netloc)
         urlhash = get_urlhash(url)
@@ -166,6 +169,8 @@ class Scraper:
                 else:
                     self.wordfrequencies_save[word] += freq
             self.pagelengths_save[url] = page_length
+            self.wordfrequencies_save.sync()
+            self.pagelengths_save.sync()
             
         finally:
             self.lock.release()
