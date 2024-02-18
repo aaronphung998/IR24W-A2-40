@@ -196,61 +196,63 @@ class Frontier(object):
         url = normalize(url)
         urlhash = get_urlhash(url)
             
+        in_save = False
         self.save_lock.acquire()
         try:
             with shelve.open(self.config.save_file) as save:
-                if urlhash not in save:
-                    parse = urlparse(url)
-                    valid = True
-
-                    # Enforce heuristics for detecting traps
-                    if parse.path != '':
-                        # Avoid links that have a lot of queries
-                        #   currently this is not perfect as news article queries (e.g. https://www.ics.uci.edu/community/news/view_news?id=1645)
-                        #       can contain important information
-                        #   idea: search for keywords like "news", "article" in query links and excuse them from query limits
-                        if parse.query != '':
-                            # print(url)
-                            no_query = parse._replace(query='')
-                            no_q_url = no_query.geturl()
-                            no_q_urlhash = get_urlhash(no_q_url)
-                            self.add_url(no_q_url)
-                            # print(self.query_counts[no_query.geturl()])
-                            self.query_counts_lock.acquire()
-                            try:
-                                with shelve.open(self.query_counts_file) as query_shelve:
-                                    if not no_q_urlhash in query_shelve:
-                                        query_shelve[no_q_urlhash] = 0
-                                        query_shelve.sync()
-                                    if query_shelve[no_q_urlhash] < self.query_limit:
-                                        query_shelve[no_q_urlhash] += 1
-                                        query_shelve.sync()
-                                    else:
-                                        valid = False
-                            finally:
-                                self.query_counts_lock.release()
-
-                            # if self.query_counts[no_query.geturl()] < self.query_limit:
-                            #     self.query_counts[no_query.geturl()] += 1
-                            # else:
-                            #     valid = False
-                                # print('too many queries!')
-
-                        # Avoid going down too deep in subdirectories
-                        file_path = parse.path.split('/')
-                        if len(file_path) > self.depth_limit:
-                            valid = False
-                    if valid:
-                        domain = parse.netloc
-
-                        # get just the ***.uci.edu domain if it's one of those domains
-                        d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
-                        if d_match:
-                            domain = d_match.group(1)
-                        # domain hash to put into queue list
-                        self.add_url_to_queue(url, urlhash, domain)
+                in_save = urlhash in save
         finally:
-            self.save_lock.release()        
+            self.save_lock.release()
+        if not in_save:
+            parse = urlparse(url)
+            valid = True
+
+            # Enforce heuristics for detecting traps
+            if parse.path != '':
+                # Avoid links that have a lot of queries
+                #   currently this is not perfect as news article queries (e.g. https://www.ics.uci.edu/community/news/view_news?id=1645)
+                #       can contain important information
+                #   idea: search for keywords like "news", "article" in query links and excuse them from query limits
+                if parse.query != '':
+                    # print(url)
+                    no_query = parse._replace(query='')
+                    no_q_url = no_query.geturl()
+                    no_q_urlhash = get_urlhash(no_q_url)
+                    self.add_url(no_q_url)
+                    # print(self.query_counts[no_query.geturl()])
+                    self.query_counts_lock.acquire()
+                    try:
+                        with shelve.open(self.query_counts_file) as query_shelve:
+                            if not no_q_urlhash in query_shelve:
+                                query_shelve[no_q_urlhash] = 0
+                                query_shelve.sync()
+                            if query_shelve[no_q_urlhash] < self.query_limit:
+                                query_shelve[no_q_urlhash] += 1
+                                query_shelve.sync()
+                            else:
+                                valid = False
+                    finally:
+                        self.query_counts_lock.release()
+
+                    # if self.query_counts[no_query.geturl()] < self.query_limit:
+                    #     self.query_counts[no_query.geturl()] += 1
+                    # else:
+                    #     valid = False
+                        # print('too many queries!')
+
+                # Avoid going down too deep in subdirectories
+                file_path = parse.path.split('/')
+                if len(file_path) > self.depth_limit:
+                    valid = False
+            if valid:
+                domain = parse.netloc
+
+                # get just the ***.uci.edu domain if it's one of those domains
+                d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
+                if d_match:
+                    domain = d_match.group(1)
+                # domain hash to put into queue list
+                self.add_url_to_queue(url, urlhash, domain)
                 
 
     
