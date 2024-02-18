@@ -71,6 +71,8 @@ class Frontier(object):
         # Load existing save file, or create one if it does not exist.
         # self.save = shelve.open(self.config.save_file)
         # self.query_counts_shelve = shelve.open(self.query_counts_file)
+        self.save_lock = RLock()
+        self.query_counts_lock = RLock()
 
         if restart:
             for url in self.config.seed_urls:
@@ -114,23 +116,27 @@ class Frontier(object):
 
     def _parse_save_file(self):
         ''' This function can be overridden for alternate saving techniques. '''
-        with shelve.open(self.config.save_file) as save:
-            total_count = len(save)
-            tbd_count = 0
-            for url, completed in save.values():
-                if not completed and is_valid(url):
-                    urlhash = get_urlhash(url)
-                    parse = urlparse(url)
-                    domain = parse.netloc
-                    # self.to_be_downloaded.put(url)
-                    d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
-                    if d_match:
-                        domain = d_match.group(1)
-                    self.add_url_to_queue(url, urlhash, domain)
-                    tbd_count += 1
-            self.logger.info(
-                f"Found {tbd_count} urls to be downloaded from {total_count} "
-                f"total urls discovered.")
+        self.save_lock.acquire()
+        try:
+            with shelve.open(self.config.save_file) as save:
+                total_count = len(save)
+                tbd_count = 0
+                for url, completed in save.values():
+                    if not completed and is_valid(url):
+                        urlhash = get_urlhash(url)
+                        parse = urlparse(url)
+                        domain = parse.netloc
+                        # self.to_be_downloaded.put(url)
+                        d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
+                        if d_match:
+                            domain = d_match.group(1)
+                        self.add_url_to_queue(url, urlhash, domain)
+                        tbd_count += 1
+                self.logger.info(
+                    f"Found {tbd_count} urls to be downloaded from {total_count} "
+                    f"total urls discovered.")
+        finally:
+            self.save_lock.release()
 
     def get_tbd_url(self):
         self.pop_lock.acquire()
@@ -186,54 +192,61 @@ class Frontier(object):
         url = normalize(url)
         urlhash = get_urlhash(url)
             
-        with shelve.open(self.config.save_file) as save:
-            if urlhash not in save:
-                parse = urlparse(url)
-                valid = True
+        self.save_lock.acquire()
+        try:
+            with shelve.open(self.config.save_file) as save:
+                if urlhash not in save:
+                    parse = urlparse(url)
+                    valid = True
 
-                # Enforce heuristics for detecting traps
-                if parse.path != '':
-                    # Avoid links that have a lot of queries
-                    #   currently this is not perfect as news article queries (e.g. https://www.ics.uci.edu/community/news/view_news?id=1645)
-                    #       can contain important information
-                    #   idea: search for keywords like "news", "article" in query links and excuse them from query limits
-                    if parse.query != '':
-                        # print(url)
-                        no_query = parse._replace(query='')
-                        no_q_url = no_query.geturl()
-                        no_q_urlhash = get_urlhash(no_q_url)
-                        self.add_url(no_q_url)
-                        # print(self.query_counts[no_query.geturl()])
-                        with shelve.open(self.query_counts_file) as query_shelve:
-                            if not no_q_urlhash in query_shelve:
-                                query_shelve[no_q_urlhash] = 0
-                                query_shelve.sync()
-                            if query_shelve[no_q_urlhash] < self.query_limit:
-                                query_shelve[no_q_urlhash] += 1
-                                query_shelve.sync()
-                            else:
-                                valid = False
+                    # Enforce heuristics for detecting traps
+                    if parse.path != '':
+                        # Avoid links that have a lot of queries
+                        #   currently this is not perfect as news article queries (e.g. https://www.ics.uci.edu/community/news/view_news?id=1645)
+                        #       can contain important information
+                        #   idea: search for keywords like "news", "article" in query links and excuse them from query limits
+                        if parse.query != '':
+                            # print(url)
+                            no_query = parse._replace(query='')
+                            no_q_url = no_query.geturl()
+                            no_q_urlhash = get_urlhash(no_q_url)
+                            self.add_url(no_q_url)
+                            # print(self.query_counts[no_query.geturl()])
+                            self.query_counts_lock.acquire()
+                            try:
+                                with shelve.open(self.query_counts_file) as query_shelve:
+                                    if not no_q_urlhash in query_shelve:
+                                        query_shelve[no_q_urlhash] = 0
+                                        query_shelve.sync()
+                                    if query_shelve[no_q_urlhash] < self.query_limit:
+                                        query_shelve[no_q_urlhash] += 1
+                                        query_shelve.sync()
+                                    else:
+                                        valid = False
+                            finally:
+                                self.query_counts_lock.release()
 
-                        # if self.query_counts[no_query.geturl()] < self.query_limit:
-                        #     self.query_counts[no_query.geturl()] += 1
-                        # else:
-                        #     valid = False
-                            # print('too many queries!')
+                            # if self.query_counts[no_query.geturl()] < self.query_limit:
+                            #     self.query_counts[no_query.geturl()] += 1
+                            # else:
+                            #     valid = False
+                                # print('too many queries!')
 
-                    # Avoid going down too deep in subdirectories
-                    file_path = parse.path.split('/')
-                    if len(file_path) > self.depth_limit:
-                        valid = False
-                if valid:
-                    domain = parse.netloc
+                        # Avoid going down too deep in subdirectories
+                        file_path = parse.path.split('/')
+                        if len(file_path) > self.depth_limit:
+                            valid = False
+                    if valid:
+                        domain = parse.netloc
 
-                    # get just the ***.uci.edu domain if it's one of those domains
-                    d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
-                    if d_match:
-                        domain = d_match.group(1)
-                    # domain hash to put into queue list
-                    self.add_url_to_queue(url, urlhash, domain)
-                
+                        # get just the ***.uci.edu domain if it's one of those domains
+                        d_match = re.search('([a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}\.[a-zA-Z0-9]{2,}$)', domain)
+                        if d_match:
+                            domain = d_match.group(1)
+                        # domain hash to put into queue list
+                        self.add_url_to_queue(url, urlhash, domain)
+        finally:
+            self.save_lock.release()        
                 
 
     
@@ -244,9 +257,13 @@ class Frontier(object):
         try:
             self.tbd[domain_hash % self.queue_count].put(url)
             self.increment_tbd()
-            with open(self.config.save_file) as save:
-                save[urlhash] = (url, False)
-                save.sync()
+            self.save_lock.acquire()
+            try:
+                with shelve.open(self.config.save_file) as save:
+                    save[urlhash] = (url, False)
+                    save.sync()
+            finally:
+                self.save_lock.release()
             self.to_be_downloaded.put(url)
             # self.logger.info(f'Added {url} to frontier.')
         finally:
@@ -255,18 +272,26 @@ class Frontier(object):
     def is_crawled(self, url):
         result = False
         urlhash = get_urlhash(url)
-        with shelve.open(self.config.save_file) as save:
-            result = (urlhash in save and save[urlhash][1])
+        self.save_lock.acquire()
+        try:
+            with shelve.open(self.config.save_file) as save:
+                result = (urlhash in save and save[urlhash][1])
+        finally:
+            self.save_lock.release()
         return result
         # return (urlhash in self.save and self.save[urlhash][1])
     
     def mark_url_complete(self, url):
         urlhash = get_urlhash(url)
-        with shelve.open(self.config.save_file) as save:
-            if urlhash not in save:
-                # This should not happen.
-                self.logger.error(
-                    f"Completed url {url}, but have not seen it before.")
+        self.save_lock.acquire()
+        try:
+            with shelve.open(self.config.save_file) as save:
+                if urlhash not in save:
+                    # This should not happen.
+                    self.logger.error(
+                        f"Completed url {url}, but have not seen it before.")
 
-            save[urlhash] = (url, True)
-            save.sync()
+                save[urlhash] = (url, True)
+                save.sync()
+        finally:
+            self.save_lock.release()
