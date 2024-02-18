@@ -80,10 +80,14 @@ class Frontier(object):
         else:
             # Set the frontier state with contents of save file.
             self._parse_save_file()
-            with shelve.open(self.config.save_file) as save:
-                if not save:
-                    for url in self.config.seed_urls:
-                        self.add_url(url)
+            self.save_lock.acquire()
+            try:
+                with shelve.open(self.config.save_file) as save:
+                    if not save:
+                        for url in self.config.seed_urls:
+                            self.add_url(url)
+            finally:
+                self.save_lock.release()
     
     def increment_tbd(self):
         self.tbd_count_lock.acquire()
