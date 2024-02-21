@@ -3,6 +3,15 @@ ABOUT
 This is the base implementation of a full crawler that uses a spacetime
 cache server to receive requests.
 
+TEAM MEMBERS
+-------------------------
+- Aaron Phung
+    - NetID: ahphung1
+    - Student ID: 13682984
+- Ashley Ly
+    - NetID: lyak2
+    - Student ID: 76824670
+
 CONFIGURATION
 -------------------------
 
