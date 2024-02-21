@@ -203,9 +203,9 @@ class Frontier(object):
                     # print(self.query_counts[no_query.geturl()])
                     if not no_q_urlhash in self.query_counts_shelve:
                         self.query_counts_shelve[no_q_urlhash] = 0
-                    if self.query_counts_file[no_q_urlhash] < self.query_limit:
-                        self.query_counts_file[no_q_urlhash] += 1
-                    else
+                    if self.query_counts_shelve[no_q_urlhash] < self.query_limit:
+                        self.query_counts_shelve[no_q_urlhash] += 1
+                    else:
                         valid = False
 
                     # if self.query_counts[no_query.geturl()] < self.query_limit:
