@@ -10,7 +10,7 @@ TEAM MEMBERS
     - Student ID: 13682984
 - Ashley Ly
     - NetID: lyak2
-    - Student ID: 76824670
+    - Student ID: 75824670
 
 CONFIGURATION
 -------------------------
